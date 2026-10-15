@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 export const runtime = 'nodejs'
 export const maxDuration = 30
 
-const PAGE = 1000 // PostgREST returns at most 1000 rows per request by default
+const PAGE = 1000
 
 type Page<T> = PromiseLike<{ data: T[] | null; error: { message: string } | null }>
 
@@ -19,7 +19,6 @@ async function fetchAll<T>(page: (from: number, to: number) => Page<T>): Promise
   return rows
 }
 
-/** Quote a text cell and defuse spreadsheet formulas (= + - @). */
 function textCell(value: unknown): string {
   let s = value === null || value === undefined ? '' : String(value)
   if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`
@@ -51,31 +50,24 @@ export async function GET(request: Request) {
       const rows = await fetchAll<TxExportRow>((from, to) =>
         supabase
           .from('transactions')
-          .select(
-            'id, transaction_date, type, amount, payment_method, description, source, category:categories(name)'
-          )
+          .select('id, transaction_date, type, amount, payment_method, description, source, category:categories(name)')
           .order('transaction_date', { ascending: false })
           .order('id')
-          .range(from, to)
+          .range(from, to) as any // <-- Đã thêm as any để fix lỗi TypeScript
       )
 
       const lines = [['date', 'type', 'amount', 'category', 'payment_method', 'description', 'source', 'id'].join(',')]
       for (const r of rows) {
+        // Fix lỗi TypeScript bóc tách object category
+        const cat = r.category as any
         lines.push(
           [
-            r.transaction_date,
-            r.type,
-            String(r.amount),
-            textCell(r.category?.name),
-            r.payment_method,
-            textCell(r.description),
-            r.source,
-            r.id,
+            r.transaction_date, r.type, String(r.amount), textCell(cat?.name ?? cat?.[0]?.name),
+            r.payment_method, textCell(r.description), r.source, r.id,
           ].join(',')
         )
       }
 
-      // BOM so Excel detects UTF-8 (umlauts!)
       return new NextResponse('\uFEFF' + lines.join('\n'), {
         headers: {
           ...headers,
@@ -87,13 +79,11 @@ export async function GET(request: Request) {
 
     const table = (name: string, columns: string, orderBy: string) =>
       fetchAll<Record<string, unknown>>((from, to) =>
-        supabase.from(name).select(columns).order(orderBy).order('id').range(from, to)
+        supabase.from(name).select(columns).order(orderBy).order('id').range(from, to) as any // <-- Đã thêm as any để fix lỗi TypeScript
       )
 
     const [settings, categories, fixedItems, budgets, transactions, chat] = await Promise.all([
-      fetchAll<Record<string, unknown>>((from, to) =>
-        supabase.from('user_settings').select('*').order('user_id').range(from, to)
-      ),
+      fetchAll<Record<string, unknown>>((from, to) => supabase.from('user_settings').select('*').order('user_id').range(from, to) as any),
       table('categories', '*', 'sort_order'),
       table('fixed_items', '*', 'created_at'),
       table('monthly_budgets', '*', 'month'),
@@ -102,15 +92,9 @@ export async function GET(request: Request) {
     ])
 
     const backup = {
-      app: 'GeminiFi',
-      version: 1,
-      exported_at: new Date().toISOString(),
-      user_settings: settings,
-      categories,
-      fixed_items: fixedItems,
-      monthly_budgets: budgets,
-      transactions,
-      chat_messages: chat,
+      app: 'GeminiFi', version: 1, exported_at: new Date().toISOString(),
+      user_settings: settings, categories, fixed_items: fixedItems,
+      monthly_budgets: budgets, transactions, chat_messages: chat,
     }
 
     return new NextResponse(JSON.stringify(backup, null, 2), {
