@@ -48,7 +48,10 @@ export default async function DashboardPage({
 
         <CategoryBreakdown rows={data.categorySpend} total={data.totalSpent} currency={data.currency} />
 
-        <TransactionList transactions={data.transactions} currency={data.currency} />
+        <TransactionList transactions={data.transactions} currency={data.currency} /><footer className="flex justify-center gap-4 pb-2 pt-1 text-xs text-muted-foreground">
+  <a href="/api/export" className="underline-offset-2 hover:underline">Backup (JSON)</a>
+  <a href="/api/export?format=csv" className="underline-offset-2 hover:underline">Transactions (CSV)</a>
+</footer>
       </div>
     </div>
   )

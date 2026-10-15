@@ -1,4 +1,5 @@
 import { after, NextResponse } from 'next/server'
+import { checkChatRateLimit } from '@/lib/chat/rate-limit'
 import { checkBudgetAlerts } from '@/lib/alerts/budget'
 import { createClient } from '@/lib/supabase/server'
 import { extractTransactions } from '@/lib/gemini/client'
@@ -33,6 +34,8 @@ export async function POST(request: Request) {
   // 1. Parse + validate input (multipart for text+image, or plain JSON for text only)
   let text: string | null = null
   let file: File | null = null
+    const limited = await checkChatRateLimit(supabase)
+  if (limited) return fail(limited, 429)
   try {
     if ((request.headers.get('content-type') ?? '').includes('multipart/form-data')) {
       const form = await request.formData()
