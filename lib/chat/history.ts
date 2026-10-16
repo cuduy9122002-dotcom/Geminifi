@@ -49,6 +49,7 @@ export async function loadChatHistory(supabase: SupabaseClient, limit = 40): Pro
           }))
         : [],
       budget: isAssistant ? (meta.budget ?? null) : null,
+      answer: isAssistant ? (meta.answer ?? null) : null, // NEW
       status: 'sent',
     }
   })

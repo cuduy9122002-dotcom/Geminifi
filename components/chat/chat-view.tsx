@@ -114,6 +114,7 @@ export function ChatView({ initialMessages, currency }: Props) {
             imageUrl: null,
             transactions: json.transactions.map((t) => ({ ...t, state: 'active' as const })),
             budget: json.budget,
+            answer: json.answer,
             status: 'sent',
           },
         ])

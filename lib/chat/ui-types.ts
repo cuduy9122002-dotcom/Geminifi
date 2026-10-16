@@ -1,3 +1,4 @@
+import type { AnswerCard } from '@/lib/query/types'
 import type { BudgetSnapshot, SavedTransaction } from './types'
 
 export type TxState = 'active' | 'undoing' | 'undone'
@@ -10,6 +11,7 @@ export interface UiMessage {
   imageUrl: string | null // blob: URL (just sent) or signed Storage URL (loaded history)
   transactions: UiTransaction[]
   budget: BudgetSnapshot | null
+  answer?: AnswerCard | null
   status: 'sent' | 'sending' | 'failed'
   error?: string
 }

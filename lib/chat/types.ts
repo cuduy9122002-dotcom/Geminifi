@@ -1,3 +1,4 @@
+import type { AnswerCard } from '@/lib/query/types'
 import type { Extraction, TransactionDraft } from '@/lib/gemini/schema'
 
 export type TransactionType = TransactionDraft['type']
@@ -46,6 +47,7 @@ export interface AssistantMetadata {
   transactions: SavedTransaction[]
   budget: BudgetSnapshot | null
   skipped: number
+  answer?: AnswerCard | null 
 }
 
 export interface ChatApiResponse {
@@ -53,6 +55,7 @@ export interface ChatApiResponse {
   assistantMessage: ChatMessageDTO
   transactions: SavedTransaction[]
   budget: BudgetSnapshot | null
+  answer: AnswerCard | null
 }
 
 export interface UndoApiResponse {

@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { AnswerCardView } from './answer-card'
 import { TransactionCard } from './transaction-card'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -91,7 +92,15 @@ export function MessageBubble({ message, currency, onUndo, onRetry, onDismiss }:
           {message.transactions.map((tx) => (
             <TransactionCard key={tx.id} tx={tx} currency={currency} onUndo={() => onUndo(tx.id)} />
           ))}
-          {message.budget && hasActive && <BudgetLine budget={message.budget} currency={currency} />}
+          {message.budget && hasActive && !message.answer && (
+            <BudgetLine budget={message.budget} currency={currency} />
+          )}
+        </div>
+      )}
+
+      {message.answer && (
+        <div className="w-full max-w-[92%]">
+          <AnswerCardView card={message.answer} />
         </div>
       )}
     </div>
