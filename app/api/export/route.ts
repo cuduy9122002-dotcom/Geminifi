@@ -82,21 +82,21 @@ export async function GET(request: Request) {
         supabase.from(name).select(columns).order(orderBy).order('id').range(from, to) as any // <-- Đã thêm as any để fix lỗi TypeScript
       )
 
-    const [settings, categories, fixedItems, budgets, transactions, chat] = await Promise.all([
+    const [settings, categories, fixedItems, budgets, transactions, chat, goals] = await Promise.all([
       fetchAll<Record<string, unknown>>((from, to) => supabase.from('user_settings').select('*').order('user_id').range(from, to) as any),
       table('categories', '*', 'sort_order'),
       table('fixed_items', '*', 'created_at'),
       table('monthly_budgets', '*', 'month'),
       table('transactions', '*', 'created_at'),
       table('chat_messages', 'id, role, content, image_path, metadata, created_at', 'created_at'),
-      table('savings_goals', '*', 'created_at'),
+      table('savings_goals', '*', 'created_at'), // <-- Đã thêm lệnh lấy dữ liệu ống heo
     ])
 
     const backup = {
       app: 'GeminiFi', version: 1, exported_at: new Date().toISOString(),
       user_settings: settings, categories, fixed_items: fixedItems,
       monthly_budgets: budgets, transactions, chat_messages: chat,
-      savings_goals: goals,
+      savings_goals: goals, // <-- Đã ghép biến goals vào file backup thành công
     }
 
     return new NextResponse(JSON.stringify(backup, null, 2), {
