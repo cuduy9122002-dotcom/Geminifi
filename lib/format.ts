@@ -1,6 +1,7 @@
 import type { PaymentMethod } from '@/lib/chat/types'
 
 const LOCALE = 'en-DE'
+const MONEY_LOCALE = 'de-DE'
 
 export function formatMoney(amount: number, currency: string): string {
   return new Intl.NumberFormat(LOCALE, { style: 'currency', currency }).format(amount)

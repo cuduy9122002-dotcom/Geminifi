@@ -2,12 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, MessageCircle } from 'lucide-react'
+import { LayoutDashboard, MessageCircle, PiggyBank } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const TABS = [
   { href: '/', label: 'Chat', icon: MessageCircle },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/savings', label: 'Savings', icon: PiggyBank },
 ] as const
 
 export function AppNav() {
@@ -17,7 +18,7 @@ export function AppNav() {
     <nav className="border-t bg-background pb-[env(safe-area-inset-bottom)]">
       <ul className="mx-auto flex max-w-2xl">
         {TABS.map(({ href, label, icon: Icon }) => {
-          const active = href === '/' ? pathname === '/' : pathname.startsWith(href)
+          const active = href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`)
           return (
             <li key={href} className="flex-1">
               <Link

@@ -191,9 +191,9 @@ export function BudgetSheet({ monthStart, monthLabel, currency, income, fixedIte
 
   return (
     <Sheet>
-      <SheetTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "h-8 gap-1" })}>
-  {/* keep your icons or text exactly the same here */}
-  Edit Budget
+      <SheetTrigger render={<Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" />}>
+  <Settings2 className="size-3.5" />
+  {income === null ? 'Set up budget' : 'Edit budget'}
 </SheetTrigger>
 
       <SheetContent side="bottom" className="max-h-[92dvh] overflow-y-auto rounded-t-2xl px-4 pb-10">

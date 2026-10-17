@@ -89,12 +89,14 @@ export async function GET(request: Request) {
       table('monthly_budgets', '*', 'month'),
       table('transactions', '*', 'created_at'),
       table('chat_messages', 'id, role, content, image_path, metadata, created_at', 'created_at'),
+      table('savings_goals', '*', 'created_at'),
     ])
 
     const backup = {
       app: 'GeminiFi', version: 1, exported_at: new Date().toISOString(),
       user_settings: settings, categories, fixed_items: fixedItems,
       monthly_budgets: budgets, transactions, chat_messages: chat,
+      savings_goals: goals,
     }
 
     return new NextResponse(JSON.stringify(backup, null, 2), {

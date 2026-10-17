@@ -13,6 +13,7 @@ import {
   Tag,
   Undo2,
   Utensils,
+  PiggyBank,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -31,6 +32,7 @@ const ICONS: Record<string, LucideIcon> = {
   banknote: Banknote,
   'undo-2': Undo2,
   'circle-plus': CirclePlus,
+  'piggy-bank': PiggyBank,
 }
 
 export function CategoryIcon({ name, className }: { name: string | null; className?: string }) {
