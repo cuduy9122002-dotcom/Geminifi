@@ -134,13 +134,16 @@ export async function deleteGoal(goalId: string): Promise<ActionResult> {
   if (!userId) return { ok: false, error: 'Please sign in again.' }
   if (!UUID_RE.test(String(goalId))) return { ok: false, error: 'Unknown goal.' }
 
-  // Past deposits stay in your transaction history; they just lose their goal tag
+  // ONE statement. The foreign key (ON DELETE CASCADE, migration 003) removes every deposit that
+  // belongs to this goal in the same atomic step: all gone together, or nothing changed.
   const { error } = await supabase.from('savings_goals').delete().eq('id', goalId)
   if (error) {
     console.error('[goals] delete failed:', error)
-    return { ok: false, error: 'Could not delete the goal.' }
+    return { ok: false, error: 'Could not delete the goal. Nothing was changed.' }
   }
-  
+
+  // The deposits are gone, so the month's budget changed: refresh both pages
   revalidatePath('/savings')
+  revalidatePath('/dashboard')
   return { ok: true }
 }

@@ -1,12 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { loadDashboard } from '@/lib/dashboard/data'
 import { formatMonthLabel } from '@/lib/dashboard/helpers'
+import { loadWealth } from '@/lib/dashboard/wealth'
 import { BudgetHero } from '@/components/dashboard/budget-hero'
 import { BudgetSheet } from '@/components/dashboard/budget-sheet'
 import { CategoryBreakdown } from '@/components/dashboard/category-breakdown'
 import { MonthSwitcher } from '@/components/dashboard/month-switcher'
 import { SignOutButton } from '@/components/dashboard/sign-out-button'
 import { TransactionList } from '@/components/dashboard/transaction-list'
+import { WealthStrip } from '@/components/dashboard/wealth-strip'
 
 export default async function DashboardPage({
   searchParams,
@@ -15,7 +17,7 @@ export default async function DashboardPage({
 }) {
   const { month } = await searchParams
   const supabase = await createClient()
-  const data = await loadDashboard(supabase, month)
+  const [data, wealth] = await Promise.all([loadDashboard(supabase, month), loadWealth(supabase)])
   const monthLabel = formatMonthLabel(data.month)
 
   return (
@@ -38,6 +40,10 @@ export default async function DashboardPage({
           </div>
         </header>
 
+        {/* Secondary: small, all-time figures */}
+        <WealthStrip wealth={wealth} currency={data.currency} />
+
+        {/* Primary: the month's remaining budget stays the focal point */}
         <BudgetHero
           summary={data.summary}
           fallbackSpent={data.totalSpent}
@@ -48,10 +54,16 @@ export default async function DashboardPage({
 
         <CategoryBreakdown rows={data.categorySpend} total={data.totalSpent} currency={data.currency} />
 
-        <TransactionList transactions={data.transactions} currency={data.currency} /><footer className="flex justify-center gap-4 pb-2 pt-1 text-xs text-muted-foreground">
-  <a href="/api/export" className="underline-offset-2 hover:underline">Backup (JSON)</a>
-  <a href="/api/export?format=csv" className="underline-offset-2 hover:underline">Transactions (CSV)</a>
-</footer>
+        <TransactionList transactions={data.transactions} currency={data.currency} />
+
+        <footer className="flex justify-center gap-4 pb-2 pt-1 text-xs text-muted-foreground">
+          <a href="/api/export" className="underline-offset-2 hover:underline">
+            Backup (JSON)
+          </a>
+          <a href="/api/export?format=csv" className="underline-offset-2 hover:underline">
+            Transactions (CSV)
+          </a>
+        </footer>
       </div>
     </div>
   )

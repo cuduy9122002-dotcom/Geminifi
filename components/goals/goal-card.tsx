@@ -63,7 +63,7 @@ export function GoalCard({ goal, currency }: Props) {
     startTransition(async () => {
       const res = await deleteGoal(goal.id)
       if (!res.ok) toast.error(res.error)
-      else toast('Goal deleted. Past deposits stay in your transactions.')
+      else toast(goal.saved > 0 ? `Goal deleted. ${money(goal.saved)} is back in your budget.` : 'Goal deleted.')
     })
   }
 
