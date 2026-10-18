@@ -1,6 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { cycleFor, normalizeCycleDay } from '@/lib/cycles'
 import { sendEmail } from '@/lib/email/send'
 import { budgetAlertEmail, type AlertLine } from '@/lib/email/templates'
 import { formatMoney } from '@/lib/format'
@@ -19,38 +20,33 @@ interface Candidate {
 }
 
 /**
- * Checks one month's budget + category limits and emails any newly crossed thresholds.
- * `month` is YYYY-MM. Safe to call as often as you like: alerts_log prevents repeats.
+ * Checks the budget + category limits of the payday cycle that contains `onDate` (YYYY-MM-DD, in the
+ * user's timezone) and emails any newly crossed thresholds.
+ * Safe to call as often as you like: alerts_log prevents repeats.
  */
 export async function checkBudgetAlerts(
   userId: string,
-  month: string,
+  onDate: string,
   admin: SupabaseClient = createAdminClient()
 ): Promise<{ sent: number }> {
   const { data: settings, error: settingsError } = await admin
     .from('user_settings')
-    .select('currency, notification_email, alerts_enabled')
+    .select('currency, notification_email, alerts_enabled, cycle_start_day')
     .eq('user_id', userId)
     .maybeSingle()
   if (settingsError) throw settingsError
   if (!settings || !settings.alerts_enabled) return { sent: 0 }
 
   const currency = settings.currency as string
-  const monthStart = `${month}-01`
+  const cycle = cycleFor(onDate, normalizeCycleDay(settings.cycle_start_day))
+  const month = cycle.key // part of the alert's dedupe key: one alert per cycle and threshold
 
+  // The service role has no logged-in user, so the user id is passed explicitly (p_user)
   const [summaryRes, catRes] = await Promise.all([
     admin
-      .from('monthly_summary')
-      .select('available_budget, remaining_budget, spent, spent_pct')
-      .eq('user_id', userId)
-      .eq('month', monthStart)
+      .rpc('cycle_summary', { p_key: cycle.keyDate, p_start: cycle.start, p_end: cycle.end, p_user: userId })
       .maybeSingle(),
-    admin
-      .from('category_spend')
-      .select('category_id, category_name, monthly_limit, spent, pct_of_limit')
-      .eq('user_id', userId)
-      .eq('month', monthStart)
-      .not('monthly_limit', 'is', null),
+    admin.rpc('cycle_category_spend', { p_start: cycle.start, p_end: cycle.end, p_user: userId }),
   ])
   if (summaryRes.error) throw summaryRes.error
   if (catRes.error) throw catRes.error

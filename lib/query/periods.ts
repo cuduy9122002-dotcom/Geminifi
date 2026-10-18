@@ -1,4 +1,5 @@
-import { daysInMonth, formatMonthLabel, isMonthParam, shiftMonth } from '@/lib/dashboard/helpers'
+import { cycleFromKey, cycleKeyFor, shiftKey } from '@/lib/cycles'
+import { isMonthParam } from '@/lib/dashboard/helpers'
 import { formatShortDate } from '@/lib/format'
 import type { QuerySpec } from '@/lib/gemini/schema'
 
@@ -19,14 +20,18 @@ export interface ResolvedPeriod {
   from: string // inclusive, YYYY-MM-DD
   to: string // inclusive, YYYY-MM-DD
   label: string
-  month: string | null // YYYY-MM when the period is exactly one calendar month
+  month: string | null // cycle key (YYYY-MM) when the period is exactly one payday cycle
   days: number // elapsed days in the period (up to today), at least 1
 }
 
 type PeriodSpec = Pick<QuerySpec, 'period' | 'month' | 'date_from' | 'date_to'>
 
-export function resolvePeriod(spec: PeriodSpec, today: string): ResolvedPeriod {
-  const currentMonth = today.slice(0, 7)
+/**
+ * "This month", "last month" and "in September" mean the user's payday CYCLES (the one containing today,
+ * the one before it, and the one that ENDS in September), not calendar months.
+ */
+export function resolvePeriod(spec: PeriodSpec, today: string, cycleStartDay: number): ResolvedPeriod {
+  const currentKey = cycleKeyFor(today, cycleStartDay)
 
   const span = (from: string, to: string, label: string, month: string | null = null): ResolvedPeriod => ({
     from,
@@ -36,8 +41,10 @@ export function resolvePeriod(spec: PeriodSpec, today: string): ResolvedPeriod {
     days: Math.max(1, daysBetween(from, to < today ? to : today) + 1),
   })
 
-  const wholeMonth = (ym: string, label: string) =>
-    span(`${ym}-01`, `${ym}-${String(daysInMonth(ym)).padStart(2, '0')}`, label, ym)
+  const wholeCycle = (key: string, label: string) => {
+    const cycle = cycleFromKey(key, cycleStartDay, today)
+    return span(cycle.start, cycle.end, label, key)
+  }
 
   const weekdayOffset = (new Date(toUtc(today)).getUTCDay() + 6) % 7 // Monday = 0
 
@@ -59,10 +66,13 @@ export function resolvePeriod(spec: PeriodSpec, today: string): ResolvedPeriod {
     case 'last_30_days':
       return span(addDays(today, -29), today, 'Last 30 days')
     case 'last_month':
-      return wholeMonth(shiftMonth(currentMonth, -1), 'Last month')
+      return wholeCycle(shiftKey(currentKey, -1), 'Last cycle')
     case 'specific_month':
-      if (isMonthParam(spec.month) && spec.month <= currentMonth) {
-        return wholeMonth(spec.month, spec.month === currentMonth ? 'This month' : formatMonthLabel(spec.month))
+      if (isMonthParam(spec.month) && spec.month >= '2000-01' && spec.month <= currentKey) {
+        return wholeCycle(
+          spec.month,
+          spec.month === currentKey ? 'This cycle' : cycleFromKey(spec.month, cycleStartDay, today).label
+        )
       }
       break
     case 'custom_range':
@@ -75,5 +85,5 @@ export function resolvePeriod(spec: PeriodSpec, today: string): ResolvedPeriod {
       break
   }
 
-  return wholeMonth(currentMonth, 'This month')
+  return wholeCycle(currentKey, 'This cycle')
 }

@@ -1,3 +1,4 @@
+import { cycleFor, normalizeCycleDay } from '@/lib/cycles'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { NormalizedTransaction } from './normalize'
 import type {
@@ -21,7 +22,7 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
 
 export async function getUserContext(supabase: SupabaseClient) {
   const [settings, categories] = await Promise.all([
-    supabase.from('user_settings').select('currency, timezone').maybeSingle(),
+    supabase.from('user_settings').select('currency, timezone, cycle_start_day').maybeSingle(),
     supabase
       .from('categories')
       .select('id, name, kind, icon')
@@ -33,26 +34,30 @@ export async function getUserContext(supabase: SupabaseClient) {
   if (!categories.data?.length) throw new Error('No active categories found for this user')
 
   return {
-    currency: (settings.data?.currency as string | undefined) ?? 'EUR',
     timezone: (settings.data?.timezone as string | undefined) ?? 'Europe/Berlin',
+    cycleStartDay: normalizeCycleDay(settings.data?.cycle_start_day),
     categories: categories.data as CategoryRow[],
   }
 }
 
-/** Non-critical: returns null if there is no budget for that month yet. */
+/**
+ * Budget numbers for the payday cycle that contains `onDate` (YYYY-MM-DD).
+ * Non-critical: returns null if there is no budget for that cycle yet.
+ */
 export async function getBudgetSnapshot(
   supabase: SupabaseClient,
-  monthStart: string
+  onDate: string
 ): Promise<BudgetSnapshot | null> {
+  const { data: settings } = await supabase.from('user_settings').select('cycle_start_day').maybeSingle()
+  const cycle = cycleFor(onDate, normalizeCycleDay(settings?.cycle_start_day))
+
   const { data, error } = await supabase
-    .from('monthly_summary')
-    .select('month, available_budget, remaining_budget, spent_pct')
-    .eq('month', monthStart)
+    .rpc('cycle_summary', { p_key: cycle.keyDate, p_start: cycle.start, p_end: cycle.end })
     .maybeSingle()
 
   if (error || !data) return null
   return {
-    month: data.month as string,
+    month: cycle.keyDate,
     available: Number(data.available_budget),
     remaining: Number(data.remaining_budget),
     spentPct: data.spent_pct === null ? null : Number(data.spent_pct),

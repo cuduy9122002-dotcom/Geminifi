@@ -133,7 +133,7 @@ export async function POST(request: Request) {
     if (transactions.some((t) => t.type === 'expense')) {
       after(async () => {
         try {
-          await checkBudgetAlerts(userId, today.slice(0, 7))
+          await checkBudgetAlerts(userId, today)
         } catch (err) {
           console.error('[alerts] instant check failed:', err)
         }
@@ -141,7 +141,7 @@ export async function POST(request: Request) {
     }
 
     const budget = transactions.length
-      ? await getBudgetSnapshot(supabase, `${today.slice(0, 7)}-01`)
+      ? await getBudgetSnapshot(supabase, today)
       : null
 
     // 5. Questions: answered from the database AFTER saving, so the numbers include what was just logged
@@ -151,6 +151,7 @@ export async function POST(request: Request) {
         answer = await answerQuery(supabase, extraction.query, {
           currency: ctx.currency,
           today,
+          cycleStartDay: ctx.cycleStartDay,
           categories: ctx.categories,
         })
       } catch (err) {

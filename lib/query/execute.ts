@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { daysInMonth } from '@/lib/dashboard/helpers'
+import { cycleFromKey, cycleKeyFor, cycleProgress, type Cycle } from '@/lib/cycles'
 import { formatMoney, formatShortDate, PAYMENT_LABELS } from '@/lib/format'
 import type { CategoryRow, PaymentMethod } from '@/lib/chat/types'
 import { NO_CATEGORY, type QuerySpec } from '@/lib/gemini/schema'
@@ -13,6 +13,7 @@ const TOP_N = 5
 export interface AnswerContext {
   currency: string
   today: string // YYYY-MM-DD in the user's timezone
+  cycleStartDay: number // 1-31: the user's payday
   categories: CategoryRow[]
 }
 
@@ -76,11 +77,10 @@ async function fetchTransactions(supabase: SupabaseClient, f: Filters): Promise<
   return (data ?? []) as unknown as TxRow[]
 }
 
-async function monthSummary(supabase: SupabaseClient, month: string) {
+async function cycleSummary(supabase: SupabaseClient, ctx: AnswerContext, key: string) {
+  const cycle = cycleFromKey(key, ctx.cycleStartDay, ctx.today)
   const { data, error } = await supabase
-    .from('monthly_summary')
-    .select('available_budget, remaining_budget, spent, spent_pct')
-    .eq('month', `${month}-01`)
+    .rpc('cycle_summary', { p_key: cycle.keyDate, p_start: cycle.start, p_end: cycle.end })
     .maybeSingle()
   if (error) throw error
   if (!data) return null
@@ -92,11 +92,10 @@ async function monthSummary(supabase: SupabaseClient, month: string) {
   }
 }
 
-/** Money per day for the rest of the current month (today included). */
-function perDay(remaining: number, today: string) {
-  if (remaining <= 0) return null
-  const month = today.slice(0, 7)
-  const daysLeft = daysInMonth(month) - Number(today.slice(8, 10)) + 1
+/** Money per day for the rest of the cycle (today included). */
+function perDay(remaining: number, cycle: Cycle, today: string) {
+  const { daysLeft } = cycleProgress(cycle, today)
+  if (remaining <= 0 || daysLeft < 1) return null
   return { amount: remaining / daysLeft, daysLeft }
 }
 
@@ -104,9 +103,12 @@ function perDay(remaining: number, today: string) {
 
 async function budgetCard(supabase: SupabaseClient, ctx: AnswerContext, period: ResolvedPeriod): Promise<AnswerCard> {
   const m = (n: number) => formatMoney(n, ctx.currency)
-  const month = period.month ?? ctx.today.slice(0, 7)
-  const label = month === ctx.today.slice(0, 7) ? 'This month' : period.label
-  const s = await monthSummary(supabase, month)
+  const currentKey = cycleKeyFor(ctx.today, ctx.cycleStartDay)
+  const key = period.month ?? currentKey
+  const isCurrent = key === currentKey
+  const cycle = cycleFromKey(key, ctx.cycleStartDay, ctx.today)
+  const label = isCurrent ? 'This cycle' : period.label
+  const s = await cycleSummary(supabase, ctx, key)
 
   if (!s) {
     return {
@@ -116,9 +118,7 @@ async function budgetCard(supabase: SupabaseClient, ctx: AnswerContext, period: 
     }
   }
 
-  const isCurrent = month === ctx.today.slice(0, 7)
-  const dayOfMonth = Number(ctx.today.slice(8, 10))
-  const elapsed = Math.round((dayOfMonth / daysInMonth(month)) * 100)
+  const { elapsedPct: elapsed } = cycleProgress(cycle, ctx.today)
   const ahead = s.pct !== null && s.pct > elapsed + 10
 
   const tone: Tone =
@@ -131,10 +131,10 @@ async function budgetCard(supabase: SupabaseClient, ctx: AnswerContext, period: 
 
   let footnote: string | undefined
   if (isCurrent) {
-    rows.push({ label: 'Month elapsed', value: `${elapsed}%` })
-    const day = perDay(s.remaining, ctx.today)
+    rows.push({ label: 'Cycle elapsed', value: `${elapsed}%` })
+    const day = perDay(s.remaining, cycle, ctx.today)
     if (day) rows.push({ label: `Per day (${day.daysLeft} days left)`, value: m(day.amount) })
-    if (ahead && s.remaining >= 0) footnote = "You're spending faster than the month is passing."
+    if (ahead && s.remaining >= 0) footnote = "You're spending faster than the cycle is passing."
   }
 
   return {
@@ -182,11 +182,11 @@ async function categoryCard(
     const remaining = limit - spent
     const pct = limit > 0 ? (spent / limit) * 100 : 100
     const out: AnswerRow[] = [
-      { label: 'Monthly limit', value: m(limit) },
+      { label: 'Limit per cycle', value: m(limit) },
       { label: 'Spent', value: `${m(spent)} (${Math.round(pct)}%)` },
     ]
-    if (period.month === ctx.today.slice(0, 7)) {
-      const day = perDay(remaining, ctx.today)
+    if (period.month === cycleKeyFor(ctx.today, ctx.cycleStartDay)) {
+      const day = perDay(remaining, cycleFromKey(period.month, ctx.cycleStartDay, ctx.today), ctx.today)
       if (day) out.push({ label: `Per day (${day.daysLeft} days left)`, value: m(day.amount) })
     }
     out.push(count)
@@ -202,13 +202,13 @@ async function categoryCard(
     return {
       title,
       headline: { label: `Spent on ${category.name}`, value: m(spent) },
-      rows: [{ label: 'Monthly limit', value: m(limit) }, count],
+      rows: [{ label: 'Limit per cycle', value: m(limit) }, count],
     }
   }
 
   // No limit: show spend, plus the overall budget for context
   const out: AnswerRow[] = [{ label: 'Limit', value: 'Not set' }, count]
-  const summary = await monthSummary(supabase, period.month ?? ctx.today.slice(0, 7))
+  const summary = await cycleSummary(supabase, ctx, period.month ?? cycleKeyFor(ctx.today, ctx.cycleStartDay))
   if (summary) out.push({ label: 'Overall budget left', value: m(summary.remaining), tone: summary.remaining < 0 ? 'bad' : undefined })
 
   return {
@@ -365,7 +365,7 @@ export async function answerQuery(
   spec: QuerySpec,
   ctx: AnswerContext
 ): Promise<AnswerCard | null> {
-  const period = resolvePeriod(spec, ctx.today)
+  const period = resolvePeriod(spec, ctx.today, ctx.cycleStartDay)
 
   switch (spec.kind) {
     case 'budget_remaining':

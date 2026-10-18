@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { todayInTimezone } from '@/lib/chat/normalize'
 import { checkBudgetAlerts } from '@/lib/alerts/budget'
+import { cycleFor, normalizeCycleDay } from '@/lib/cycles'
 import { sendDueReminders, type UserRow } from '@/lib/alerts/reminders'
 import { carryOverBudget } from '@/lib/budget/carry-over'
 
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
   const admin = createAdminClient()
   const { data: users, error } = await admin
     .from('user_settings')
-    .select('user_id, timezone, currency, notification_email, alerts_enabled')
+    .select('user_id, timezone, currency, notification_email, alerts_enabled, cycle_start_day')
   if (error) {
     console.error('[cron] could not load users:', error)
     return NextResponse.json({ error: 'Could not load users' }, { status: 500 })
@@ -46,13 +47,14 @@ export async function GET(request: Request) {
   const results: Record<string, unknown>[] = []
 
   for (const u of users ?? []) {
-    const user = u as UserRow & { alerts_enabled: boolean }
-    const month = todayInTimezone(user.timezone).date.slice(0, 7)
-    const report: Record<string, unknown> = { user: user.user_id.slice(0, 8), month }
+    const user = u as UserRow & { alerts_enabled: boolean; cycle_start_day: number }
+    const today = todayInTimezone(user.timezone).date
+    const cycle = cycleFor(today, normalizeCycleDay(user.cycle_start_day))
+    const report: Record<string, unknown> = { user: user.user_id.slice(0, 8), cycle: cycle.label }
 
-    // 1. New month? Create its budget first, so the alert sweep below can see it
+    // 1. New cycle (payday)? Create its budget first, so the alert sweep below can see it
     await step(report, 'carryOver', async () =>
-      CARRY_OVER_BUDGET ? carryOverBudget(admin, user.user_id, month) : 'disabled'
+      CARRY_OVER_BUDGET ? carryOverBudget(admin, user.user_id, cycle.key) : 'disabled'
     )
     // 2. Rent / credit card / savings reminders
     await step(report, 'reminders', async () =>
@@ -60,7 +62,7 @@ export async function GET(request: Request) {
     )
     // 3. Safety-net sweep for 80% / 100% alerts (the instant check runs after each chat expense)
     await step(report, 'budgetAlerts', async () =>
-      user.alerts_enabled ? checkBudgetAlerts(user.user_id, month, admin) : 'alerts disabled'
+      user.alerts_enabled ? checkBudgetAlerts(user.user_id, today, admin) : 'alerts disabled'
     )
 
     results.push(report)

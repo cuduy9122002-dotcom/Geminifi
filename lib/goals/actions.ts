@@ -111,7 +111,7 @@ export async function depositToGoal(input: { goalId: string; amount: number }): 
   // A deposit is spending: check the 80% / 100% budget alerts, after the response is sent
   after(async () => {
     try {
-      await checkBudgetAlerts(userId, String(result.transaction_date).slice(0, 7))
+      await checkBudgetAlerts(userId, String(result.transaction_date))
     } catch (err) {
       console.error('[alerts] check after deposit failed:', err)
     }

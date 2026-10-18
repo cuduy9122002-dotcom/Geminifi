@@ -26,7 +26,7 @@ export async function DELETE(
     if (!deleted) return fail('Transaction not found (maybe already undone).', 404)
 
     // Return the refreshed budget so the card can update "remaining" instantly
-    const budget = await getBudgetSnapshot(supabase, `${deleted.transaction_date.slice(0, 7)}-01`)
+    const budget = await getBudgetSnapshot(supabase, deleted.transaction_date)
     return NextResponse.json<UndoApiResponse>({ ok: true, id, budget })
   } catch (err) {
     console.error('[undo] failed:', err)
