@@ -5,7 +5,7 @@ import type { MonthlySummary } from '@/lib/dashboard/types'
 interface Props {
   summary: MonthlySummary | null
   fallbackSpent: number
-  monthLabel: string
+  cycleLabel: string // "Aug 22 – Sep 21"
   currency: string
   dailyAllowance: { perDay: number; daysLeft: number } | null
 }
@@ -25,18 +25,21 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
   )
 }
 
-export function BudgetHero({ summary, fallbackSpent, monthLabel, currency, dailyAllowance }: Props) {
+export function BudgetHero({ summary, fallbackSpent, cycleLabel, currency, dailyAllowance }: Props) {
   const m = (n: number) => formatMoney(n, currency)
 
   if (!summary) {
     return (
       <section className="rounded-xl border bg-card p-4">
-        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          Remaining available budget
-        </p>
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            Remaining available budget
+          </p>
+          <p className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{cycleLabel}</p>
+        </div>
         <p className="mt-1 text-4xl font-semibold tracking-tight text-muted-foreground">—</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          No budget set for {monthLabel}. Tap <span className="font-medium text-foreground">Set up budget</span> to enter
+          No budget set for {cycleLabel}. Tap <span className="font-medium text-foreground">Set up budget</span> to enter
           your income and fixed costs.
         </p>
         {fallbackSpent > 0 && (
@@ -53,9 +56,12 @@ export function BudgetHero({ summary, fallbackSpent, monthLabel, currency, daily
 
   return (
     <section className="rounded-xl border bg-card p-4">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        Remaining available budget
-      </p>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          Remaining available budget
+        </p>
+        <p className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{cycleLabel}</p>
+      </div>
       <p className={cn('mt-1 text-4xl font-semibold tabular-nums tracking-tight', tone.text)}>
         {m(summary.remaining)}
       </p>

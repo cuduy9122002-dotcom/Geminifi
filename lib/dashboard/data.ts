@@ -1,7 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { todayInTimezone } from '@/lib/chat/normalize'
 import type { PaymentMethod, TransactionType } from '@/lib/chat/types'
-import { daysInMonth, isMonthParam, shiftMonth } from './helpers'
+import { cycleFor, cycleFromKey, cycleProgress, normalizeCycleDay, shiftKey } from '@/lib/cycles'
+import { isMonthParam } from './helpers'
 import type {
   CategorySpendRow,
   DashboardData,
@@ -21,44 +22,52 @@ interface TxRow {
   category: { name: string; icon: string | null } | null
 }
 
+/**
+ * Everything the dashboard shows, for a payday-to-payday cycle instead of a calendar month.
+ *   - the running ("current") cycle drives the hero, the budget sheet and the daily allowance
+ *   - the browsed ("selected") cycle drives the category chart and the transaction list
+ * `cycleParam` is the cycle key from ?cycle=YYYY-MM (the month the cycle ends in); anything invalid
+ * or in the future falls back to the current cycle.
+ */
 export async function loadDashboard(
   supabase: SupabaseClient,
-  monthParam: string | undefined
+  cycleParam: string | undefined
 ): Promise<DashboardData> {
-  const { data: settings } = await supabase
+  const { data: row } = await supabase
     .from('user_settings')
-    .select('currency, timezone')
+    .select('currency, timezone, cycle_start_day, opening_balance, opening_cash')
     .maybeSingle()
 
-  const currency = (settings?.currency as string | undefined) ?? 'EUR'
-  const timezone = (settings?.timezone as string | undefined) ?? 'Europe/Berlin'
+  const currency = (row?.currency as string | undefined) ?? 'EUR'
+  const timezone = (row?.timezone as string | undefined) ?? 'Europe/Berlin'
+  const cycleStartDay = normalizeCycleDay(row?.cycle_start_day)
+  const settings = {
+    cycleStartDay,
+    openingBalance: Number(row?.opening_balance ?? 0),
+    openingCash: Number(row?.opening_cash ?? 0),
+  }
 
   const today = todayInTimezone(timezone).date // YYYY-MM-DD in the user's timezone
-  const currentMonth = today.slice(0, 7)
-  const month = isMonthParam(monthParam) && monthParam <= currentMonth ? monthParam : currentMonth
-  const monthStart = `${month}-01`
-  const nextStart = `${shiftMonth(month, 1)}-01`
-  const isCurrentMonth = month === currentMonth
+  const current = cycleFor(today, cycleStartDay)
+  const selected =
+    isMonthParam(cycleParam) && cycleParam >= '2000-01' && cycleParam < current.key
+      ? cycleFromKey(cycleParam, cycleStartDay, today)
+      : current
 
   const [summaryRes, spendRes, txRes, fixedRes, catRes] = await Promise.all([
+    // Hero: always the running cycle
     supabase
-      .from('monthly_summary')
-      .select(
-        'total_income, extra_income, fixed_savings, fixed_costs, spent, available_budget, remaining_budget, spent_pct'
-      )
-      .eq('month', monthStart)
+      .rpc('cycle_summary', { p_key: current.keyDate, p_start: current.start, p_end: current.end })
       .maybeSingle(),
-    supabase
-      .from('category_spend')
-      .select('category_id, category_name, icon, monthly_limit, spent')
-      .eq('month', monthStart),
+    // Review: the selected cycle
+    supabase.rpc('cycle_category_spend', { p_start: selected.start, p_end: selected.end }),
     supabase
       .from('transactions')
       .select(
         'id, type, amount, payment_method, description, transaction_date, category:categories(name, icon)'
       )
-      .gte('transaction_date', monthStart)
-      .lt('transaction_date', nextStart)
+      .gte('transaction_date', selected.start)
+      .lte('transaction_date', selected.end)
       .order('transaction_date', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(200),
@@ -92,7 +101,7 @@ export async function loadDashboard(
       }
     : null
 
-  const categorySpend: CategorySpendRow[] = (spendRes.data ?? [])
+  const categorySpend: CategorySpendRow[] = ((spendRes.data ?? []) as Record<string, unknown>[])
     .map((r) => ({
       categoryId: r.category_id as string,
       name: r.category_name as string,
@@ -131,20 +140,21 @@ export async function loadDashboard(
     monthly_limit: c.monthly_limit === null ? null : Number(c.monthly_limit),
   }))
 
-  // "How much can I spend per day for the rest of the month?" (today included)
-  let dailyAllowance: DashboardData['dailyAllowance'] = null
-  if (isCurrentMonth && summary && summary.remaining > 0) {
-    const daysLeft = daysInMonth(month) - Number(today.slice(8, 10)) + 1
-    dailyAllowance = { perDay: summary.remaining / daysLeft, daysLeft }
-  }
+  // "How much per day until the next payday?" (today included)
+  const { daysLeft } = cycleProgress(current, today)
+  const dailyAllowance =
+    summary && summary.remaining > 0 && daysLeft > 0
+      ? { perDay: summary.remaining / daysLeft, daysLeft }
+      : null
 
   return {
-    month,
-    monthStart,
-    prevMonth: shiftMonth(month, -1),
-    nextMonth: isCurrentMonth ? null : shiftMonth(month, 1),
-    isCurrentMonth,
     currency,
+    today,
+    settings,
+    current,
+    selected,
+    prevKey: shiftKey(selected.key, -1),
+    nextKey: selected.key === current.key ? null : shiftKey(selected.key, 1),
     summary,
     categorySpend,
     totalSpent,
