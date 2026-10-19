@@ -149,7 +149,7 @@ export async function POST(request: Request) {
     if (hasQuery && (status === 'ok' || status === 'question')) {
       try {
         answer = await answerQuery(supabase, extraction.query, {
-          currency: (context as any).currency,
+          currency: (ctx as any).currency,
           today,
           cycleStartDay: ctx.cycleStartDay,
           categories: ctx.categories,
