@@ -80,9 +80,9 @@ export async function POST(request: Request) {
         context: {
           today,
           weekday,
-          timezone: context.timezone,
-          currency: (context as any).currency,
-          categories: context.categories,
+          timezone: ctx.timezone,
+          currency: (ctx as any).currency,
+          categories: ctx.categories,
         },
       })
     } catch (err) {
@@ -149,7 +149,7 @@ export async function POST(request: Request) {
     if (hasQuery && (status === 'ok' || status === 'question')) {
       try {
         answer = await answerQuery(supabase, extraction.query, {
-          currency: ctx.currency,
+          currency: (context as any).currency,
           today,
           cycleStartDay: ctx.cycleStartDay,
           categories: ctx.categories,
