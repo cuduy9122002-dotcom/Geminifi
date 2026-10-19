@@ -87,7 +87,7 @@ export async function loadDashboard(
     if (res.error) throw res.error
   }
 
-  const s = summaryRes.data
+  const s = summaryRes.data as Record<string, number | string | null> | null
   const summary: MonthlySummary | null = s
     ? {
         totalIncome: Number(s.total_income),
