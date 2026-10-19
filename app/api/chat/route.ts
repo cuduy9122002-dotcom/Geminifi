@@ -80,9 +80,9 @@ export async function POST(request: Request) {
         context: {
           today,
           weekday,
-          timezone: ctx.timezone,
-          currency: ctx.currency,
-          categories: ctx.categories,
+          timezone: context.timezone,
+          currency: (context as any).currency,
+          categories: context.categories,
         },
       })
     } catch (err) {

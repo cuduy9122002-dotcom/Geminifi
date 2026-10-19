@@ -53,7 +53,8 @@ export async function checkBudgetAlerts(
 
   const candidates: Candidate[] = []
 
-  const s = summaryRes.data
+  // supabase-js types a database function's rows as {}, so say what they are
+  const s = summaryRes.data as Record<string, number | string | null> | null
   if (s && s.spent_pct !== null) {
     candidates.push({
       scope: 'overall',
@@ -66,7 +67,7 @@ export async function checkBudgetAlerts(
     })
   }
 
-  for (const c of catRes.data ?? []) {
+  for (const c of (catRes.data ?? []) as Record<string, unknown>[]) {
     if (c.pct_of_limit === null) continue
     candidates.push({
       scope: 'category',

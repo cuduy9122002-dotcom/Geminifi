@@ -83,12 +83,13 @@ async function cycleSummary(supabase: SupabaseClient, ctx: AnswerContext, key: s
     .rpc('cycle_summary', { p_key: cycle.keyDate, p_start: cycle.start, p_end: cycle.end })
     .maybeSingle()
   if (error) throw error
-  if (!data) return null
+  const row = data as Record<string, number | string | null> | null // a database function's row is typed {} by supabase-js
+  if (!row) return null
   return {
-    available: Number(data.available_budget),
-    remaining: Number(data.remaining_budget),
-    spent: Number(data.spent),
-    pct: data.spent_pct === null ? null : Number(data.spent_pct),
+    available: Number(row.available_budget),
+    remaining: Number(row.remaining_budget),
+    spent: Number(row.spent),
+    pct: row.spent_pct === null ? null : Number(row.spent_pct),
   }
 }
 

@@ -22,7 +22,7 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
 
 export async function getUserContext(supabase: SupabaseClient) {
   const [settings, categories] = await Promise.all([
-    supabase.from('user_settings').select('currency, timezone, cycle_start_day').maybeSingle(),
+  supabase.from('user_settings').select('currency, timezone, cycle_start_day').maybeSingle(),
     supabase
       .from('categories')
       .select('id, name, kind, icon')
@@ -40,24 +40,20 @@ export async function getUserContext(supabase: SupabaseClient) {
   }
 }
 
-/**
- * Budget numbers for the payday cycle that contains `onDate` (YYYY-MM-DD).
- * Non-critical: returns null if there is no budget for that cycle yet.
- */
+/** Non-critical: returns null if there is no budget for that month yet. */
 export async function getBudgetSnapshot(
   supabase: SupabaseClient,
-  onDate: string
+  monthStart: string
 ): Promise<BudgetSnapshot | null> {
-  const { data: settings } = await supabase.from('user_settings').select('cycle_start_day').maybeSingle()
-  const cycle = cycleFor(onDate, normalizeCycleDay(settings?.cycle_start_day))
-
   const { data, error } = await supabase
-    .rpc('cycle_summary', { p_key: cycle.keyDate, p_start: cycle.start, p_end: cycle.end })
+    .from('monthly_summary')
+    .select('month, available_budget, remaining_budget, spent_pct')
+    .eq('month', monthStart)
     .maybeSingle()
 
   if (error || !data) return null
   return {
-    month: cycle.keyDate,
+    month: data.month as string,
     available: Number(data.available_budget),
     remaining: Number(data.remaining_budget),
     spentPct: data.spent_pct === null ? null : Number(data.spent_pct),
