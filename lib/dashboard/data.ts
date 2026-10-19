@@ -87,6 +87,7 @@ export async function loadDashboard(
     if (res.error) throw res.error
   }
 
+  // supabase-js can't know what a database function returns, so it types the row as {}: say what it is
   const s = summaryRes.data as Record<string, number | string | null> | null
   const summary: MonthlySummary | null = s
     ? {
