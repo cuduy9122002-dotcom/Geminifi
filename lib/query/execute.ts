@@ -59,37 +59,47 @@ function findCategory(
 }
 
 async function fetchTransactions(supabase: SupabaseClient, f: Filters): Promise<TxRow[]> {
-  let query = supabase
-    .from('transactions')
-    .select('id, type, amount, description, transaction_date, payment_method, category:categories(name)')
-    .eq('type', f.type)
-    .gte('transaction_date', f.from)
-    .lte('transaction_date', f.to)
+  try {
+    let query = supabase
+      .from('transactions')
+      .select('id, type, amount, description, transaction_date, payment_method, category:categories(name)')
+      .eq('type', f.type)
+      .gte('transaction_date', f.from)
+      .lte('transaction_date', f.to)
 
-  if (f.categoryId) query = query.eq('category_id', f.categoryId)
-  if (f.text) query = query.ilike('description', `%${f.text}%`)
+    if (f.categoryId) query = query.eq('category_id', f.categoryId)
+    if (f.text) query = query.ilike('description', `%${f.text}%`)
 
-  const { data, error } = await query
-    .order('transaction_date', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(MAX_ROWS)
-  if (error) throw error
-  return (data ?? []) as unknown as TxRow[]
+    const { data, error } = await query
+      .order('transaction_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(MAX_ROWS)
+    if (error) throw error
+    return (data ?? []) as unknown as TxRow[]
+  } catch (err) {
+    console.error('[chat tool error] fetchTransactions failed:', err)
+    throw err
+  }
 }
 
 async function cycleSummary(supabase: SupabaseClient, ctx: AnswerContext, key: string) {
-  const cycle = cycleFromKey(key, ctx.cycleStartDay, ctx.today)
-  const { data, error } = await supabase
-    .rpc('cycle_summary', { p_key: cycle.keyDate, p_start: cycle.start, p_end: cycle.end })
-    .maybeSingle()
-  if (error) throw error
-  const row = data as Record<string, number | string | null> | null // a database function's row is typed {} by supabase-js
-  if (!row) return null
-  return {
-    available: Number(row.available_budget),
-    remaining: Number(row.remaining_budget),
-    spent: Number(row.spent),
-    pct: row.spent_pct === null ? null : Number(row.spent_pct),
+  try {
+    const cycle = cycleFromKey(key, ctx.cycleStartDay, ctx.today)
+    const { data, error } = await supabase
+      .rpc('cycle_summary', { p_key: cycle.keyDate, p_start: cycle.start, p_end: cycle.end })
+      .maybeSingle()
+    if (error) throw error
+    const row = data as Record<string, number | string | null> | null // a database function's row is typed {} by supabase-js
+    if (!row) return null
+    return {
+      available: Number(row.available_budget),
+      remaining: Number(row.remaining_budget),
+      spent: Number(row.spent),
+      pct: row.spent_pct === null ? null : Number(row.spent_pct),
+    }
+  } catch (err) {
+    console.error('[chat tool error] cycleSummary failed:', err)
+    throw err
   }
 }
 
@@ -366,20 +376,31 @@ export async function answerQuery(
   spec: QuerySpec,
   ctx: AnswerContext
 ): Promise<AnswerCard | null> {
-  const period = resolvePeriod(spec, ctx.today, ctx.cycleStartDay)
+  try {
+    const period = resolvePeriod(spec, ctx.today, ctx.cycleStartDay)
 
-  switch (spec.kind) {
-    case 'budget_remaining':
-      return budgetCard(supabase, ctx, period)
-    case 'category_status':
-      return categoryCard(supabase, ctx, spec, period)
-    case 'spending_total':
-      return totalCard(supabase, ctx, spec, period)
-    case 'top_categories':
-      return topCategoriesCard(supabase, ctx, spec, period)
-    case 'find_transactions':
-      return findCard(supabase, ctx, spec, period)
-    default:
-      return null
+    switch (spec.kind) {
+      case 'budget_remaining':
+        return await budgetCard(supabase, ctx, period)
+      case 'category_status':
+        return await categoryCard(supabase, ctx, spec, period)
+      case 'spending_total':
+        return await totalCard(supabase, ctx, spec, period)
+      case 'top_categories':
+        return await topCategoriesCard(supabase, ctx, spec, period)
+      case 'find_transactions':
+        return await findCard(supabase, ctx, spec, period)
+      default:
+        return null
+    }
+  } catch (err) {
+    console.error(`[chat tool error] answerQuery(${spec.kind}) failed:`, {
+      spec,
+      currency: ctx.currency,
+      today: ctx.today,
+      cycleStartDay: ctx.cycleStartDay,
+      error: err,
+    })
+    throw err
   }
 }

@@ -13,6 +13,7 @@ import { normalizeDrafts, todayInTimezone } from '@/lib/chat/normalize'
 import { checkChatRateLimit } from '@/lib/chat/rate-limit'
 import { checkBudgetAlerts } from '@/lib/alerts/budget'
 import { answerQuery } from '@/lib/query/execute'
+import { cycleKeyFor } from '@/lib/cycles'
 import type { AnswerCard } from '@/lib/query/types'
 import type { ChatApiError, ChatApiResponse, SavedTransaction } from '@/lib/chat/types'
 
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
           today,
           weekday,
           timezone: ctx.timezone,
-          currency: (ctx as any).currency,
+          currency: ctx.currency,
           categories: ctx.categories,
         },
       })
@@ -141,7 +142,7 @@ export async function POST(request: Request) {
     }
 
     const budget = transactions.length
-      ? await getBudgetSnapshot(supabase, today)
+      ? await getBudgetSnapshot(supabase, `${cycleKeyFor(today, ctx.cycleStartDay)}-01`)
       : null
 
     // 5. Questions: answered from the database AFTER saving, so the numbers include what was just logged
@@ -149,7 +150,7 @@ export async function POST(request: Request) {
     if (hasQuery && (status === 'ok' || status === 'question')) {
       try {
         answer = await answerQuery(supabase, extraction.query, {
-          currency: (ctx as any).currency,
+          currency: ctx.currency,
           today,
           cycleStartDay: ctx.cycleStartDay,
           categories: ctx.categories,

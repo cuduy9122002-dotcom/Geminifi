@@ -34,21 +34,30 @@ export async function getUserContext(supabase: SupabaseClient) {
   if (!categories.data?.length) throw new Error('No active categories found for this user')
 
   return {
+    currency: (settings.data?.currency as string | undefined) ?? 'EUR',
     timezone: (settings.data?.timezone as string | undefined) ?? 'Europe/Berlin',
     cycleStartDay: normalizeCycleDay(settings.data?.cycle_start_day),
     categories: categories.data as CategoryRow[],
   }
 }
 
-/** Non-critical: returns null if there is no budget for that month yet. */
+/**
+ * Non-critical: returns null if there is no budget for that month yet.
+ * `keyDate` is a cycle key date in YYYY-MM-01 format (e.g. from `cycle.keyDate`).
+ * For convenience, a bare YYYY-MM-DD date is also accepted: it is normalised to the
+ * first of its month so the query always matches the monthly_summary key column.
+ */
 export async function getBudgetSnapshot(
   supabase: SupabaseClient,
-  monthStart: string
+  keyDate: string
 ): Promise<BudgetSnapshot | null> {
+  // Normalise: "2026-10-21" → "2026-10-01", "2026-10-01" stays "2026-10-01"
+  const monthKey = `${keyDate.slice(0, 7)}-01`
+
   const { data, error } = await supabase
     .from('monthly_summary')
     .select('month, available_budget, remaining_budget, spent_pct')
-    .eq('month', monthStart)
+    .eq('month', monthKey)
     .maybeSingle()
 
   if (error || !data) return null
